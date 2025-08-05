@@ -16,6 +16,25 @@ from io import BytesIO
 import os
 ckan_user_api_key = os.getenv("CKAN_USER_API_KEY")
 
+from fastmcp.server.auth import RemoteAuthProvider
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+from pydantic import AnyHttpUrl
+
+# Auth ------------------------------------------------------------------------------------------------
+
+# Configure token validation for your identity provider
+token_verifier = JWTVerifier(
+    jwks_uri="https://civic-data.uk.auth0.com/.well-known/jwks.json",
+    issuer="https://civic-data.uk.auth0.com/",
+    audience="https://api.civic-data.com"
+)
+
+# Create the remote auth provider
+auth = RemoteAuthProvider(
+    token_verifier=token_verifier,
+    authorization_servers=[AnyHttpUrl("https://civic-data.uk.auth0.com")],
+    resource_server_url="https://api.civic-data.com"
+)
 
 
 # Server ------------------------------------------------------------------------------------------------
