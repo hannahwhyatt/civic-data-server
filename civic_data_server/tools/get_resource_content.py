@@ -55,7 +55,7 @@ def get_tabular_content(resource_id: str) -> str:
     path = os.path.join(tempfile.gettempdir(), f"{resource_id}.csv")
     if os.path.exists(path):
         df = pd.read_csv(path)
-        if df.size[0] > 25:
+        if len(df) > 25:
             return df[:25].to_string()
         else:
             return df.to_string()
@@ -220,7 +220,7 @@ def get_tabular_content(resource_id: str) -> str:
         # Save the CSV to a file for future use
         df.to_csv(path, index=False)
         
-        if df.size[0] > 25:
+        if len(df) > 25:
             return df[:25].to_string()
         else:
             return df.to_string()
