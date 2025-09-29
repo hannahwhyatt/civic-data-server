@@ -194,25 +194,12 @@ For plots:
         else:
             env.pop("MCP_RUN_PY_DEBUG", None)
 
-        # Use the module-level project_dir
-        env["PROJECT_ROOT"] = project_dir
-
-        # Add a helper at the start of the wrapped code
-        helper_code = """
-import os
-PROJECT_ROOT = os.environ['PROJECT_ROOT']
-"""
-
-        wrapped_code = f"{helper_code}\n{code}\n{plot_collector if capture_plots else ''}\n"
-
-        # When creating the subprocess, set the working directory
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             tmp_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
-            cwd=project_dir  # Set the working directory to project root
         )
 
         try:
