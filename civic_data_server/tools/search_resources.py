@@ -44,6 +44,9 @@ def register(mcp):
         ) -> str:
         """Searches directly for individual files (resources) like CSVs or PDFs using keywords. Use this as a shortcut when the user asks for a specific file, report, or data format. Returns the resource name, format, URL, resource ID, and the ID of the dataset it belongs to (package_id).
         """
+        # Ensure query string is a single keyword
+        if " " in query:
+            return "Error: Query must be a SINGLE keyword"
         
         ckan_api_base_url = "https://www.liverpoolcivicdata.com/api/3"
 
