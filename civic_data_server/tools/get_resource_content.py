@@ -50,13 +50,13 @@ def get_pdf_content(resource_id: str) -> str:
 
     return pdf_text
 
-def get_tabular_content(resource_id: str, preview_only: bool = True) -> str:
+def get_tabular_content(resource_id: str) -> str:
     """Get the text of a CSV resource by its resource ID."""
     path = os.path.join(tempfile.gettempdir(), f"{resource_id}.csv")
     if os.path.exists(path):
         df = pd.read_csv(path)
-        if preview_only:
-            return df[:50].to_string()
+        if df.size[0] > 25:
+            return df[:25].to_string()
         else:
             return df.to_string()
     
@@ -220,8 +220,8 @@ def get_tabular_content(resource_id: str, preview_only: bool = True) -> str:
         # Save the CSV to a file for future use
         df.to_csv(path, index=False)
         
-        if preview_only:
-            return df[:50].to_string()
+        if df.size[0] > 25:
+            return df[:25].to_string()
         else:
             return df.to_string()
 
@@ -240,15 +240,14 @@ def register(mcp):
     async def get_resource_content(
         resource_id: Annotated[str, Field(description="The ID of the resource to get the content for.")],
         resource_format: Annotated[str, Field(description="The format of the resource (CSV, Excel (xlsx, xlsm, xls), or PDF).")],
-        preview_only: Annotated[bool, Field(description="If true, returns only the first 50 rows for CSV/Excel resources.")],
     ) -> str:
-        """Retrieve the content of any resource (CSV, Excel, or PDF) by its resource ID. For tabular data (CSV/Excel), returns the raw text content that can be analyzed. For PDFs, returns extracted text. resoucre id and resource format must be provided. Always use this before attempting analysis to understand the data structure."""
+        """Retrieve the content of any resource (CSV, Excel, or PDF) by its resource ID. For tabular data (CSV/Excel), returns the raw text content that can be analyzed, limited to the first 25 rows. For PDFs, returns extracted text. resoucre id and resource format must be provided. Always use this before attempting analysis to understand the data structure."""
     
         if resource_format.lower() == "pdf":
             return get_pdf_content(resource_id)
         elif resource_format.lower() == "csv":
-            return get_tabular_content(resource_id, preview_only)
+            return get_tabular_content(resource_id)
         elif resource_format.lower() in ["excel", "xlsx", "xlsm", "xls"]:
-            return get_tabular_content(resource_id, preview_only)
+            return get_tabular_content(resource_id)
         else:
             return "Error: Invalid resource format"
