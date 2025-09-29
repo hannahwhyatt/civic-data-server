@@ -1,5 +1,6 @@
 import requests
 import os
+import tempfile
 from io import BytesIO
 import pymupdf
 from typing import Annotated
@@ -14,7 +15,7 @@ ckan_user_api_key = os.getenv("CKAN_USER_API_KEY")
 def get_pdf_content(resource_id: str) -> str:
     """Get the text of a PDF resource by its resource ID."""
     # Check if the resource has been read before
-    path = f"civic_data_server/data/{resource_id}.txt"
+    path = os.path.join(tempfile.gettempdir(), f"{resource_id}.txt")
     if os.path.exists(path):
         with open(path, "r") as f:
             return f.read()
@@ -44,7 +45,6 @@ def get_pdf_content(resource_id: str) -> str:
         return f"Error processing PDF request: {str(e)}"
 
     # Save the text of the pdf to a file
-    os.makedirs("civic_data_server/data", exist_ok=True)
     with open(path, "w") as f:
         f.write(pdf_text)
 
@@ -52,7 +52,7 @@ def get_pdf_content(resource_id: str) -> str:
 
 def get_tabular_content(resource_id: str, preview_only: bool = True) -> str:
     """Get the text of a CSV resource by its resource ID."""
-    path = f"civic_data_server/data/{resource_id}.csv"
+    path = os.path.join(tempfile.gettempdir(), f"{resource_id}.csv")
     if os.path.exists(path):
         df = pd.read_csv(path)
         if preview_only:
@@ -218,7 +218,6 @@ def get_tabular_content(resource_id: str, preview_only: bool = True) -> str:
                 return "Error: Could not parse file - no valid data found"
         
         # Save the CSV to a file for future use
-        os.makedirs("civic_data_server/data", exist_ok=True)
         df.to_csv(path, index=False)
         
         if preview_only:
