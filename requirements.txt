@@ -1,0 +1,15 @@
+# Production dependencies for Civic Data MCP Server
+fastmcp>=2.10.4
+requests>=2.32.4
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+pymupdf>=1.26.3
+google-genai>=1.28.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-dotenv>=1.0.1
+matplotlib
+plotly
+
+# Production server dependencies
+# uwsgi removed - using FastMCP's built-in server instead
