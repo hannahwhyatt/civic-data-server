@@ -25,12 +25,18 @@ def register(mcp):
         code: Annotated[
             str,
             Field(description="""Python code to run. For data analysis workflow:
-1. First use 'get_csv_text_by_resource_id' to fetch and cache a CSV file
-2. Then use 'analyse_csv' to understand the data structure
-3. Finally use this tool for custom analysis and visualization
+1. First use 'get_resource_content' to fetch and cache a resource.
+2. Then use 'analyse_tabular_data' to understand its structure.
+3. Finally, use this tool for custom analysis and visualization.
 
-For CSV files, use the relative path as shown in other tools:
-    df = pd.read_csv('civic_data_server/data/' + resource_id + '.csv')
+For tabular files, construct the path to the cached file in the temp directory, like this:
+    import os
+    import tempfile
+    import pandas as pd
+    # resource_id must be defined and the file must be cached
+    resource_id = "your_resource_id"
+    path = os.path.join(tempfile.gettempdir(), f"{resource_id}.csv")
+    df = pd.read_csv(path)
 
 For plots:
 - Use matplotlib for visualizations

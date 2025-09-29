@@ -1,5 +1,7 @@
 import pandas as pd
 import json
+import os
+import tempfile
 
 
 
@@ -12,7 +14,8 @@ def register(mcp):
     ) -> str:
         """Perform automated analysis on CSV or Excel data to understand its structure, data types, statistical properties, missing values, and potential issues. Returns column names, data types, basic statistics, row count, and data quality indicators. Use this after retrieving content to understand the data before writing custom analysis code."""
         
-        df = pd.read_csv('civic_data_server/data/' + resource_id + '.csv')
+        path = os.path.join(tempfile.gettempdir(), f"{resource_id}.csv")
+        df = pd.read_csv(path)
     
         info = {}
 
