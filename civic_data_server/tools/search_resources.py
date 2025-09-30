@@ -17,7 +17,7 @@ def format_resource_search_response(response: dict) -> str:
     resources = result.get("results", [])
 
     result_string = ""
-    for result in resources:
+    for result in resources[:3]:
         result_string += f""" 
         Resource name: {result.get("name")}
         Resource format: {result.get("format")}
@@ -63,4 +63,5 @@ def register(mcp):
             else:
                 continue
 
+        result_list = list(set(result_list))
         return "\n\n".join(result_list)
