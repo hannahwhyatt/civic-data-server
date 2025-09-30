@@ -64,4 +64,4 @@ def register(mcp):
                 continue
 
         result_list = list(set(result_list))
-        return "\n\n".join(result_list)
+        return "\n\n".join(result_list) + "\n\nEnd of results. Use ONLY the results that are relevant to the user's request."

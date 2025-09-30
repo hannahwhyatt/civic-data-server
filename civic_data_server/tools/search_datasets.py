@@ -57,7 +57,7 @@ def register(mcp):
             data = response.json()
 
             if data.get("success") == True:
-                return format_dataset_search_response(data)
+                return format_dataset_search_response(data) + "\n\nEnd of results. Use ONLY the results that are relevant to the user's request."
             else:
                 return f"Error retrieving dataset search results: {data.get('error')}"
         except requests.RequestException as e:
