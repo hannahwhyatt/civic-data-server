@@ -17,7 +17,7 @@ if not base_url:
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_dir = os.path.dirname(os.path.dirname(current_dir))
-image_default_path = os.path.join(project_dir, "temp", "plot")
+image_default_path = os.path.join(tempfile.gettempdir(), "plot")
 
 def register(mcp):
     @mcp.tool(
@@ -241,53 +241,53 @@ For plots:
         # Save images to disk if requested
         image_urls = []
         if save_images and plots:
-            if 'temp' not in image_path:
-                image_path = image_default_path
-
-            # Create directory if it doesn't exist
-            os.makedirs(image_path, exist_ok=True)
-            
-            # Make sure directory is writable
-            if not os.access(image_path, os.W_OK):
+            # Try to create directory and verify writability
+            try:
+                os.makedirs(image_path, exist_ok=True)
+                dir_ready = os.access(image_path, os.W_OK)
+            except Exception as e:
                 if debug:
-                    print(f"Warning: Image directory {image_path} is not writable", file=sys.stderr)
+                    print(f"Warning: Could not create image directory {image_path}: {e}", file=sys.stderr)
+                dir_ready = False
+
+            if not dir_ready:
+                if debug:
+                    print(f"Warning: Image directory {image_path} is not writable; falling back to base64 only.", file=sys.stderr)
                 save_images = False
             else:
+                # Determine if this directory is publicly served (project temp/plot)
+                public_plot_dir = os.path.join(project_dir, "temp", "plot")
+                is_public_served = os.path.abspath(image_path) == os.path.abspath(public_plot_dir)
+
                 # Save each plot as a file
                 for i, p in enumerate(plots):
                     if p.get('type') == 'base64' and p.get('data'):
                         try:
                             # Extract the base64 data (remove the data:image/png;base64, prefix)
                             img_data = p['data'].split(',', 1)[1]
-                            
+
                             # Generate a unique filename
                             filename = f"plot_{uuid.uuid4().hex}.png"
 
                             filepath = os.path.join(image_path, filename)
-                            
+
                             # Write the file
                             import base64
                             with open(filepath, 'wb') as f:
                                 f.write(base64.b64decode(img_data))
-                            # Ensure file is readable by Nginx
+                            # Ensure file is readable by web server
                             os.chmod(filepath, 0o644)
-                            
-                            # Add URL to the plot and remove base64 data to reduce payload size
-                            # Check if we're in development mode and need a full URL
-                            if base_url and os.getenv("ENVIRONMENT", "").lower() == "development":
-                                # Use full URL for development environments
-                                base = base_url.rstrip('/')
+
+                            # Add URL only if saving to publicly served directory
+                            if is_public_served:
+                                base = (base_url or "").rstrip('/')
                                 url_path = f"{base}/temp/plot/{filename}"
-                            else:
-                                # Use relative URL for production (will resolve against current domain)
-                                url_path = f"{base}/temp/plot/{filename}"
-                            p['url'] = url_path
-                            image_urls.append(url_path)
-                            
-                            # Remove the base64 data to reduce payload size
-                            if 'data' in p:
-                                del p['data']
-                            
+                                p['url'] = url_path
+                                image_urls.append(url_path)
+                                # Remove the base64 data to reduce payload size when URL is available
+                                if 'data' in p:
+                                    del p['data']
+
                             if debug:
                                 print(f"Saved image to {filepath}", file=sys.stderr)
                         except Exception as e:
