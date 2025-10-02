@@ -43,13 +43,13 @@ For tabular files, construct the path to the cached file in the temp directory, 
 
 For plots:
 - Use matplotlib or plotly for visualizations
-- Figures are captured as base64 for markdown rendering and also saved as PNG files under your system temporary directory. Each returned plot includes a 'path' field to the saved image.
+- Figures are saved as PNG files under your system temporary directory. If S3 is configured, public URLs are returned; otherwise the local file path is returned. No base64 will be embedded in markdown.
 """),
         ],
         timeout_seconds: Annotated[int, Field(description="Maximum time in seconds to allow execution.")]=60,
         capture_plots: Annotated[
             bool,
-            Field(description="If true, collect figures and include base64 for markdown plus file paths to PNGs saved under system temp.")
+            Field(description="If true, collect figures and include either public URLs (if available) or local file paths. No base64 in markdown.")
         ] = True,
         return_markdown: Annotated[
             bool,
@@ -57,7 +57,7 @@ For plots:
         ] = True,
         save_images: Annotated[
             bool,
-            Field(description="If true, save captured plots as PNG files under system temp and return their file paths.")
+            Field(description="If true, save captured plots as PNG files under system temp and return their file paths (and URLs if S3 is configured).")
         ] = True,
         image_path: Annotated[
             str,
@@ -249,6 +249,7 @@ For plots:
 
         # Save images to disk if requested
         image_paths = []
+        image_urls = []
         if save_images and plots:
             try:
                 os.makedirs(image_path, exist_ok=True)
@@ -265,6 +266,20 @@ For plots:
 
             # Save each plot as a file
             if save_images:
+                # Optional: configure S3 upload for public URLs
+                s3_bucket = os.getenv("MCP_S3_BUCKET")
+                s3_prefix = os.getenv("MCP_S3_PREFIX", "plots/")
+                s3_base_url = os.getenv("MCP_S3_PUBLIC_BASE_URL")  # e.g., https://cdn.example.com
+                s3_client = None
+                if s3_bucket:
+                    try:
+                        import boto3  # type: ignore
+                        s3_client = boto3.client("s3")
+                    except Exception as e:
+                        if debug:
+                            print(f"Warning: boto3 unavailable for S3 upload: {e}", file=sys.stderr)
+                        s3_client = None
+
                 for i, p in enumerate(plots):
                     if p.get('type') == 'base64' and p.get('data'):
                         try:
@@ -290,11 +305,43 @@ For plots:
                             p['path'] = filepath
                             image_paths.append(filepath)
 
+                            # Attempt S3 upload for public URL
+                            if s3_client and s3_bucket:
+                                try:
+                                    key = f"{s3_prefix}{os.path.basename(filepath)}"
+                                    content_type = "image/png"
+                                    extra_args = {"ContentType": content_type}
+                                    # Public-read if using direct S3 URLs; otherwise rely on CloudFront or presigned URLs
+                                    if os.getenv("MCP_S3_PUBLIC_READ", "true").lower() in ("1", "true", "yes"):
+                                        extra_args["ACL"] = "public-read"
+                                    s3_client.upload_file(filepath, s3_bucket, key, ExtraArgs=extra_args)
+                                    if s3_base_url:
+                                        url = f"{s3_base_url.rstrip('/')}/{key}"
+                                    else:
+                                        # Fallback generic S3 URL
+                                        url = f"https://{s3_bucket}.s3.amazonaws.com/{key}"
+                                    p['url'] = url
+                                    image_urls.append(url)
+                                    # Drop base64 to reduce payload if URL is available
+                                    if 'data' in p:
+                                        del p['data']
+                                except Exception as e:
+                                    if debug:
+                                        print(f"Warning: S3 upload failed: {e}", file=sys.stderr)
+
                             if debug:
                                 print(f"Saved image to {filepath}", file=sys.stderr)
                         except Exception as e:
                             if debug:
                                 print(f"Error saving image: {e}", file=sys.stderr)
+
+            # Remove any base64 data to avoid large payloads or markdown embedding
+            try:
+                for _p in plots:
+                    if 'data' in _p:
+                        del _p['data']
+            except Exception:
+                pass
 
         # Optionally compose a markdown block that a chatbot can render directly
         markdown = None
@@ -311,9 +358,8 @@ For plots:
                 parts.append("### Figures")
                 for i, p in enumerate(plots, start=1):
                     title = p.get('title') or f'Plot {i}'
-                    if p.get('type') == 'base64' and p.get('data'):
-                        # Embed as base64 for reliable rendering
-                        md_img = f"![{title}]({p['data']})"
+                    if p.get('url'):
+                        md_img = f"![{title}]({p['url']})"
                         parts.append(f"#### {title}\n\n" + md_img)
                         p['markdown'] = md_img
                     elif p.get('path'):
@@ -344,6 +390,7 @@ For plots:
                 "stdout_length": len(stdout_text),
                 "stderr_length": len(stderr_text),
                 "images_saved": len(image_paths) if save_images else 0,
+                "image_urls": len(image_urls) if save_images else 0,
                 "image_path": image_path if save_images else None
             }
         }
