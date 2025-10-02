@@ -31,8 +31,13 @@ def register(mcp):
 2. Then use 'analyse_tabular_data' to understand its structure.
 3. Finally, use this tool for custom analysis and visualization.
 
+In general, start all scripts with the following line:
+    import os
+    os.environ['MPLCONFIGDIR'] = os.getcwd() + "/configs/"
+
 For tabular files, construct the path to the cached file in the temp directory, like this:
     import os
+    os.environ['MPLCONFIGDIR'] = os.getcwd() + "/configs/"
     import tempfile
     import pandas as pd
     # resource_id must be defined and the file must be cached
