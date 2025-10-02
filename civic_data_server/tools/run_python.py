@@ -11,14 +11,9 @@ from pathlib import Path
 import dotenv
 
 dotenv.load_dotenv()
-base_url = os.getenv("BACKEND_DOMAIN")
-# if not base_url:
-#     base_url = "https://www.liverpoolcivicdata.com"
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_dir = os.path.dirname(os.path.dirname(current_dir))
-image_default_path = os.path.join(project_dir, "temp", "plot")
-# image_default_path = os.path.join(tempfile.gettempdir(), "plot")
+# Default to system temp directory for images
+image_default_path = os.path.join(tempfile.gettempdir(), "plot")
 
 def register(mcp):
     @mcp.tool(
@@ -47,14 +42,14 @@ For tabular files, construct the path to the cached file in the temp directory, 
     df = pd.read_csv(path)
 
 For plots:
-- Use matplotlib for visualizations
-- Figures will be automatically saved as PNG images and referenced by URL
+- Use matplotlib or plotly for visualizations
+- Figures are captured as base64 for markdown rendering and also saved as PNG files under your system temporary directory. Each returned plot includes a 'path' field to the saved image.
 """),
         ],
         timeout_seconds: Annotated[int, Field(description="Maximum time in seconds to allow execution.")]=60,
         capture_plots: Annotated[
             bool,
-            Field(description="If true, collect matplotlib figures and return them as URLs to PNG images saved on the server.")
+            Field(description="If true, collect figures and include base64 for markdown plus file paths to PNGs saved under system temp.")
         ] = True,
         return_markdown: Annotated[
             bool,
@@ -62,11 +57,11 @@ For plots:
         ] = True,
         save_images: Annotated[
             bool,
-            Field(description="If true, save captured plots as PNG files on the server and return URLs.")
+            Field(description="If true, save captured plots as PNG files under system temp and return their file paths.")
         ] = True,
         image_path: Annotated[
             str,
-            Field(description="Directory to save images if save_images=True. Defaults to project's temp/plot directory.")
+            Field(description="Directory to save images if save_images=True. Defaults to system temp (tempfile.gettempdir()/plot).")
         ] = image_default_path,
         debug: Annotated[
             bool,
@@ -202,6 +197,14 @@ For plots:
         else:
             env.pop("MCP_RUN_PY_DEBUG", None)
 
+        # Ensure matplotlib uses a writable config directory in system temp
+        try:
+            mpl_config_dir = os.path.join(tempfile.gettempdir(), "mplconfig")
+            os.makedirs(mpl_config_dir, exist_ok=True)
+            env.setdefault("MPLCONFIGDIR", mpl_config_dir)
+        except Exception:
+            pass
+
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             tmp_path,
@@ -245,35 +248,23 @@ For plots:
             stdout_text = "\n".join(remaining_lines)
 
         # Save images to disk if requested
-        image_urls = []
+        image_paths = []
         if save_images and plots:
-            if 'temp' not in 'image_path':
-                image_path = image_default_path
-            # # Try to create directory and verify writability
-            # try:
-            #     os.makedirs(image_path, exist_ok=True)
-            #     dir_ready = os.access(image_path, os.W_OK)
-            # except Exception as e:
-            #     if debug:
-            #         print(f"Warning: Could not create image directory {image_path}: {e}", file=sys.stderr)
-            #     dir_ready = False
-
-            # Create directory if it doesn't exist
-            os.makedirs(image_path, exist_ok=True)
+            try:
+                os.makedirs(image_path, exist_ok=True)
+            except Exception as e:
+                if debug:
+                    print(f"Warning: Could not create image directory {image_path}: {e}", file=sys.stderr)
+                save_images = False
 
             # Make sure directory is writable
-            if not os.access(image_path, os.W_OK):
-
-            # if not dir_ready:
+            if save_images and not os.access(image_path, os.W_OK):
                 if debug:
                     print(f"Warning: Image directory {image_path} is not writable", file=sys.stderr)
                 save_images = False
-            else:
-                # # Determine if this directory is publicly served (project temp/plot)
-                # public_plot_dir = os.path.join(project_dir, "temp", "plot")
-                # is_public_served = os.path.abspath(image_path) == os.path.abspath(public_plot_dir)
 
-                # Save each plot as a file
+            # Save each plot as a file
+            if save_images:
                 for i, p in enumerate(plots):
                     if p.get('type') == 'base64' and p.get('data'):
                         try:
@@ -289,25 +280,15 @@ For plots:
                             import base64
                             with open(filepath, 'wb') as f:
                                 f.write(base64.b64decode(img_data))
-                            # Ensure file is readable by Nginx server
-                            os.chmod(filepath, 0o644)
+                            # Ensure file is readable
+                            try:
+                                os.chmod(filepath, 0o644)
+                            except Exception:
+                                pass
 
-                            # Add URL to the plot and remove base64 data to reduce payload size
-                            # Check if we're in development mode and need a full URL
-                            if base_url and os.getenv("ENVIRONMENT", "").lower() == "development":
-                                # Use full URL for development environments
-                                base = base_url.rstrip('/')
-                                url_path = f"{base}/temp/plot/{filename}"
-                            else:
-                                # Use relative URL for production (will resolve against current domain)
-                                url_path = f"/temp/plot/{filename}"
-                            p['url'] = url_path
-                            image_urls.append(url_path)
-                            
-                            
-                            # Remove the base64 data to reduce payload size when URL is available
-                            if 'data' in p:
-                                del p['data']
+                            # Record local filesystem path
+                            p['path'] = filepath
+                            image_paths.append(filepath)
 
                             if debug:
                                 print(f"Saved image to {filepath}", file=sys.stderr)
@@ -330,18 +311,15 @@ For plots:
                 parts.append("### Figures")
                 for i, p in enumerate(plots, start=1):
                     title = p.get('title') or f'Plot {i}'
-                    if p.get('url'):
-                        # Use the URL if available
-                        md_img = f"![{title}]({p['url']})"
-                        parts.append(f"#### {title}\n\n" + md_img)
-                        p['markdown'] = md_img
-                    elif not save_images and p.get('type') == 'base64' and p.get('data'):
-                        # Only use base64 if explicitly requested not to save images
+                    if p.get('type') == 'base64' and p.get('data'):
+                        # Embed as base64 for reliable rendering
                         md_img = f"![{title}]({p['data']})"
                         parts.append(f"#### {title}\n\n" + md_img)
                         p['markdown'] = md_img
+                    elif p.get('path'):
+                        parts.append(f"#### {title}\n\nSaved to: `{p['path']}`")
+                        p['markdown'] = f"Saved to: `{p['path']}`"
                     else:
-                        # No URL and no data, just add a placeholder
                         parts.append(f"#### {title}\n\n(Image not available)")
                         p['markdown'] = f"(Image not available)"
             markdown = "\n\n".join(parts)
@@ -365,7 +343,7 @@ For plots:
                 "marker_found": marker_found,
                 "stdout_length": len(stdout_text),
                 "stderr_length": len(stderr_text),
-                "images_saved": len(image_urls) if save_images else 0,
+                "images_saved": len(image_paths) if save_images else 0,
                 "image_path": image_path if save_images else None
             }
         }
