@@ -12,8 +12,8 @@ import dotenv
 
 dotenv.load_dotenv()
 base_url = os.getenv("BACKEND_DOMAIN")
-if not base_url:
-    base_url = "https://www.liverpoolcivicdata.com"
+# if not base_url:
+#     base_url = "https://www.liverpoolcivicdata.com"
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_dir = os.path.dirname(os.path.dirname(current_dir))
@@ -300,7 +300,7 @@ For plots:
                                 url_path = f"{base}/temp/plot/{filename}"
                             else:
                                 # Use relative URL for production (will resolve against current domain)
-                                url_path = f"{base}/temp/plot/{filename}"
+                                url_path = f"/temp/plot/{filename}"
                             p['url'] = url_path
                             image_urls.append(url_path)
                             
